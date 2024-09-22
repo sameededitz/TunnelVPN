@@ -33,27 +33,21 @@ class userAuth
         unset($data['password']);
         $data['password'] = $passwordhash;
         $data['registration_date'] = date('Y-m-d H:i:s');
-        $data['is_verified'] = 0;
+        $data['is_verified'] = true;
         $data['verification_token'] = bin2hex(random_bytes(16));
 
         $saveuser = $this->crud->insert('users', $data);
         if ($saveuser) {
-            global $Site;
-            $reset_link = $Site . '/verify.php?token=' . $data['verification_token'];
-            if (sendMail($data['email'], 'Verify Email', $reset_link, null, $data['username'], null, true)) {
-                // Add a record in the purchases table
-                $purchaseData = array(
-                    'user_id' => $this->crud->lastInsertId(),
-                    'status' => "true",
-                    'expiry_date' => date('Y-m-d H:i:s', strtotime('+1 month'))
-                );
-                if ($this->crud->insert('purchases', $purchaseData)) {
-                    return true;
-                } else {
-                    return 'Error: Adding a Free Trial But User Registered Successfully.';
-                }
+            // Add a record in the purchases table
+            $purchaseData = array(
+                'user_id' => $this->crud->lastInsertId(),
+                'status' => "true",
+                'expiry_date' => date('Y-m-d H:i:s', strtotime('+1 month'))
+            );
+            if ($this->crud->insert('purchases', $purchaseData)) {
+                return true;
             } else {
-                return 'Error: Sending Verification Mail';
+                return 'Error: Adding a Free Trial But User Registered Successfully.';
             }
         } else {
             return $saveuser;
@@ -70,9 +64,6 @@ class userAuth
         $checkuser = $this->crud->select('users', 'user_id, password, is_verified', null, "Username = ? OR  email = ?", array($data['username'], $data['username']));
         if (is_array($checkuser) && !empty($checkuser['user_id'])) {
             if (password_verify($data['password'], $checkuser['password'])) {
-                if (!$checkuser['is_verified']) {
-                    return "Please verify your email address.";
-                }
                 // last login
                 $user_id = $checkuser['user_id'];
                 $last_login = date('Y-m-d H:i:s');

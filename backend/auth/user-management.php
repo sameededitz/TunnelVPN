@@ -35,9 +35,6 @@ if (isset($_POST['loginuser'])) {
 
         $crud->displayMessage('Login Successfully', 'info', '../../' . $redirectUrl . '?plan=' . $plan);
         exit;
-    } elseif ($loginuser === "Please verify your email address.") {
-        $crud->displayMessage($loginuser, 'info', '../../verify-email.php');
-        exit;
     } else {
         $_SESSION['oldData'] = $data;
         $redirectUrl = isset($_SESSION['redirect_url']) ? $_SESSION['redirect_url'] : 'login.php';

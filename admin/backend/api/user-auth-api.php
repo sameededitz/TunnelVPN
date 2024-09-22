@@ -92,7 +92,7 @@ if (isset($_GET['action']) && $_GET['action'] == 'forgotpass') {
         $oldToken = $crud->delete('password_resets', "`user_id`=?", array($user['user_id']));
 
         $user_id = $user['user_id'];
-        $token = bin2hex(random_bytes(16));
+        $token = mt_rand(100000, 999999);
         $expires_at = date('Y-m-d H:i:s', strtotime('+1 hour'));
         $data = [
             'user_id' => $user_id,
@@ -102,9 +102,8 @@ if (isset($_GET['action']) && $_GET['action'] == 'forgotpass') {
 
         $addToken = $crud->insert('password_resets', $data);
         if (is_bool($addToken)) {
-            $reset_link = $Site . '/reset-password.php?token=' . $token;
-            if (sendMail($user['email'], 'Password Reset', $reset_link)) {
-                echo json_encode(array('status' => true, 'message' => 'Password Reset Link Sent Please check your email for password reset link.', "reset_link" => $reset_link), JSON_PRETTY_PRINT || JSON_UNESCAPED_UNICODE);
+            if (sendMail($user['email'], 'Password Reset', $token)) {
+                echo json_encode(array('status' => true, 'message' => 'Password Reset Link Sent Please check your email for password reset link.'), JSON_PRETTY_PRINT || JSON_UNESCAPED_UNICODE);
                 exit;
             } else {
                 echo json_encode(array('status' => false, 'message' => 'Failed to send Password Reset Link'), JSON_PRETTY_PRINT || JSON_UNESCAPED_UNICODE);
@@ -119,6 +118,104 @@ if (isset($_GET['action']) && $_GET['action'] == 'forgotpass') {
             array('status' => false, 'message' => 'Email Not Found'),
             JSON_PRETTY_PRINT || JSON_UNESCAPED_UNICODE
         );
+        exit;
+    }
+}
+
+if (isset($_GET['action']) && $_GET['action'] == 'check_token') {
+    $getdata = json_decode(file_get_contents("php://input"), true);
+
+    $required_fields = array('token');
+    $missing_fields = array();
+
+    foreach ($required_fields as $field) {
+        if (!isset($getdata[$field]) || empty($getdata[$field])) {
+            $missing_fields[] = $field;
+        }
+    }
+
+    if (!empty($missing_fields)) {
+        $response = array(
+            'status' => 'error',
+            'message' => 'Missing Required Fields',
+            'fields' => $missing_fields
+        );
+        echo json_encode($response);
+        exit;
+    }
+
+    $token = $getdata['token'];
+
+    // Check if the token exists and hasn't expired
+    $resetRecord = $crud->select('password_resets', 'user_id, expires_at', null, "`token`=?", array($token));
+
+    if (is_array($resetRecord)) {
+        $expires_at = $resetRecord['expires_at'];
+
+        // Check if the token is expired
+        if (strtotime($expires_at) < time()) {
+            echo json_encode(array('status' => false, 'message' => 'Token has expired'), JSON_PRETTY_PRINT || JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        echo json_encode(array('status' => true, 'message' => 'Token is valid'), JSON_PRETTY_PRINT || JSON_UNESCAPED_UNICODE);
+        exit;
+    } else {
+        echo json_encode(array('status' => false, 'message' => 'Invalid token'), JSON_PRETTY_PRINT || JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+}
+
+if (isset($_GET['action']) && $_GET['action'] == 'resetpass') {
+    $getdata = json_decode(file_get_contents("php://input"), true);
+
+    $required_fields = array('token', 'password');
+    $missing_fields = array();
+
+    foreach ($required_fields as $field) {
+        if (!isset($getdata[$field]) || empty($getdata[$field])) {
+            $missing_fields[] = $field;
+        }
+    }
+
+    if (!empty($missing_fields)) {
+        $response = array(
+            'status' => 'error',
+            'message' => 'Missing Required Fields',
+            'fields' => $missing_fields
+        );
+        echo json_encode($response);
+        exit;
+    }
+
+    $token = $getdata['token'];
+    $new_password = $getdata['password'];
+
+    // Check if the token exists and hasn't expired
+    $resetRecord = $crud->select('password_resets', 'user_id, expires_at', null, "`token`=?", array($token));
+
+    if (is_array($resetRecord)) {
+
+        $user_id = $resetRecord['user_id'];
+
+        // Hash the new password
+        $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
+
+        // Update the user's password in the database
+        $updatePassword = $crud->update('users', array('password' => $hashed_password), "`user_id`=$user_id");
+
+        if (is_bool($updatePassword)) {
+            // Delete the reset token after successful password update
+            $crud->delete('password_resets', "`user_id`=?", array($user_id));
+
+            echo json_encode(array('status' => true, 'message' => 'Password updated successfully'), JSON_PRETTY_PRINT || JSON_UNESCAPED_UNICODE);
+            exit;
+        } else {
+            echo json_encode(array('status' => false, 'message' => 'Failed to update password'), JSON_PRETTY_PRINT || JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+    } else {
+        echo json_encode(array('status' => false, 'message' => 'Invalid or expired token'), JSON_PRETTY_PRINT || JSON_UNESCAPED_UNICODE);
         exit;
     }
 }
